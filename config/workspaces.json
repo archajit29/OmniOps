@@ -1,0 +1,28 @@
+{
+  "workspaces": {
+    "hichat": {
+      "db_url_env": "HICHAT_DB_URL",
+      "topology": {
+        "nodes": ["hichat-web", "alb", "ecs-task", "redis", "postgres"],
+        "edges": [
+          { "from": "hichat-web", "to": "alb" },
+          { "from": "alb", "to": "ecs-task" },
+          { "from": "ecs-task", "to": "redis" },
+          { "from": "ecs-task", "to": "postgres" }
+        ]
+      }
+    },
+    "payment-gateway": {
+      "db_url_env": "PAYMENT_DB_URL",
+      "topology": {
+        "nodes": ["checkout-ui", "api-gateway", "payment-service", "stripe-proxy", "payment-db"],
+        "edges": [
+          { "from": "checkout-ui", "to": "api-gateway" },
+          { "from": "api-gateway", "to": "payment-service" },
+          { "from": "payment-service", "to": "stripe-proxy" },
+          { "from": "payment-service", "to": "payment-db" }
+        ]
+      }
+    }
+  }
+}

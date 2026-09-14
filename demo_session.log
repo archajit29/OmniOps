@@ -1,0 +1,72 @@
+================================================================================
+                       OMNIOPS LIVE END-TO-END DEMO                           
+================================================================================
+
+--- FLOW 1: AST SQL Blast-Radius Engine ---
+Testing safety rules against incoming SQL queries before any DB is touched:
+
+[QUERY] Destructive DROP TABLE: "DROP TABLE users;"
+  -> RESULT: REJECTED
+     Reason: "BLAST_RADIUS_EXCEEDED: DROP TABLE / TRUNCATE statements are strictly forbidden"
+
+[QUERY] Unindexed DELETE: "DELETE FROM users WHERE name = 'bob';"
+  -> RESULT: REJECTED
+     Reason: "BLAST_RADIUS_EXCEEDED: unindexed WHERE"
+
+[QUERY] Tautological WHERE 1=1: "DELETE FROM users WHERE 1=1;"
+  -> RESULT: REJECTED
+     Reason: "BLAST_RADIUS_EXCEEDED: no WHERE clause"
+
+[QUERY] Safe Indexed UPDATE: "UPDATE users SET email = 'alice@example.com' WHERE id = 1;"
+  -> RESULT: APPROVED (Safe to execute)
+
+--------------------------------------------------------------------------------
+--- FLOW 2: Two-Phase Dry-Run Commit & State-Drift Protection ---
+Testing cryptographic intent staging, execution, and state-drift rejection:
+
+[STAGE 1] Staging intent to flush namespace: cache:sessions
+  Initial Live State A: {
+  keyCount: 2,
+  keys: [ 'cache:sessions:sess_001', 'cache:sessions:sess_002' ],
+  digest: '09b9fb90b75ec6c3...'
+}
+  Generated Staged Payload: {
+  action: { type: 'redis_flush_namespace', target: 'cache:sessions' },
+  stateSnapshot: 'b0f027d6e9a76f33...',
+  expiresAt: '2026-09-12T12:29:13.415Z'
+}
+  HMAC-SHA256 Signature: 7a74b53932ea9b081a6291ea...
+
+[COMMIT 1] Committing intent with valid signature and matching live state...
+  Commit 1 Executed? true
+  Action executed on target: cache:sessions
+  Namespace state after flush: keyCount = 0 
+
+[COMMIT 2] Replay/Race condition: re-attempting commit using the old staged payload...
+  Commit 2 Executed? false
+  Rejection Reason: REMEDIATION_REJECTED: live state drifted from staged snapshot (state drift detected)
+
+[STATE DRIFT DEMO] Simulating concurrent mutation before commit:
+  Racing Commit Executed? false
+  Rejection Reason: REMEDIATION_REJECTED: live state drifted from staged snapshot (state drift detected) 
+
+--------------------------------------------------------------------------------
+--- FLOW 3: Causal Dependency Graph & Root Cause Analysis ---
+Analyzing cascading incident on workspace 'hichat':
+
+  Topology: hichat-web -> alb -> ecs-task -> redis / postgres
+  Incoming Alerts (simulated out of order):
+    - [t=1020ms] Alert fired on node: "alb"
+    - [t=1040ms] Alert fired on node: "ecs-task"
+    - [t=1060ms] Alert fired on node: "hichat-web"
+    - [t=1080ms] Alert fired on node: "redis"
+
+[ANALYSIS RESULT]
+  Identified Root Cause   : "hichat-web"
+  Identified Symptoms     : [alb, ecs-task, redis]
+  Possible Multiple Roots : false
+  Plain Language Report   : "Primary root cause identified: "hichat-web". Downstream symptoms caused by cascading failure: [alb, ecs-task, redis]."
+
+================================================================================
+                       ALL FLOWS COMPLETED SUCCESSFULLY                         
+================================================================================
